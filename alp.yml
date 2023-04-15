@@ -1,0 +1,5 @@
+aggregates:
+  - label: "User"
+    pattern: "^/user/\d+"
+  - label: "Post"
+    pattern: "^/post/\d+"

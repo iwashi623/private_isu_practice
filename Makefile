@@ -20,7 +20,7 @@ nginx-restart:
 
 alp:
 	echo "alp..."
-	alp -f /var/log/nginx/access.log --sum -r > alp.txt
+	alp -f /var/log/nginx/access.log --aggregates='posts/[0-9]+,/@\w+' --sum -r > alp.txt
 	sudo rm /var/log/nginx/access.log && sudo systemctl reload nginx
 
 pt-query-digest:
