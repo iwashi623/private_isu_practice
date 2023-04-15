@@ -33,9 +33,10 @@ var (
 )
 
 const (
-	postsPerPage  = 20
-	ISO8601Format = "2006-01-02T15:04:05-07:00"
-	UploadLimit   = 10 * 1024 * 1024 // 10mb
+	postsPerPage       = 20
+	ISO8601Format      = "2006-01-02T15:04:05-07:00"
+	UploadLimit        = 10 * 1024 * 1024 // 10mb
+	UploadPostFilePath = "/home/isucon/private_isu/webapp/public/image"
 )
 
 type User struct {
@@ -624,15 +625,16 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mime := ""
+	ext := ""
 	if file != nil {
 		// 投稿のContent-Typeからファイルのタイプを決定する
 		contentType := header.Header["Content-Type"][0]
 		if strings.Contains(contentType, "jpeg") {
-			mime = "image/jpeg"
+			mime, ext = "image/jpeg", ".jpg"
 		} else if strings.Contains(contentType, "png") {
-			mime = "image/png"
+			mime, ext = "image/png", ".png"
 		} else if strings.Contains(contentType, "gif") {
-			mime = "image/gif"
+			mime, ext = "image/gif", ".gif"
 		} else {
 			session := getSession(r)
 			session.Values["notice"] = "投稿できる画像形式はjpgとpngとgifだけです"
@@ -663,7 +665,8 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		query,
 		me.ID,
 		mime,
-		filedata,
+		// バイナリは保存しない
+		"",
 		r.FormValue("body"),
 	)
 	if err != nil {
@@ -673,6 +676,27 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 
 	pid, err := result.LastInsertId()
 	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	// filedataをfileとして保存する
+	fileName := UploadPostFilePath + "/" + strconv.FormatInt(pid, 10) + ext
+	f, err := os.Create(fileName)
+	if err != nil {
+		log.Print("file create error")
+		log.Print(err)
+		return
+	}
+	defer f.Close()
+	if _, err := f.Write(filedata); err != nil {
+		log.Print("file write error")
+		log.Print(err)
+		return
+	}
+
+	if err := f.Chmod(0666); err != nil {
+		log.Print("file chmod error")
 		log.Print(err)
 		return
 	}
@@ -691,6 +715,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	post := Post{}
 	err = db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
 	if err != nil {
+		log.Print("pidStr: " + pidStr)
 		log.Print(err)
 		return
 	}
@@ -706,9 +731,22 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 			log.Print(err)
 			return
 		}
+		// filedataをfileとして保存する
+		fileName := UploadPostFilePath + "/" + pidStr + "." + ext
+		f, err := os.Create(fileName)
+		if err != nil {
+			log.Print("file create error")
+			log.Print(err)
+			return
+		}
+		defer f.Close()
+		if _, err := f.Write(post.Imgdata); err != nil {
+			log.Print("file write error")
+			log.Print(err)
+			return
+		}
 		return
 	}
-
 	w.WriteHeader(http.StatusNotFound)
 }
 
