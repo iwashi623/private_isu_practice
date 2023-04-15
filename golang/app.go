@@ -215,11 +215,6 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		}
 		p.Comments = comments
 
-		err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
-		if err != nil {
-			return nil, err
-		}
-
 		p.CSRFToken = csrfToken
 
 		if p.User.DelFlg == 0 {
@@ -397,10 +392,34 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 	results := []Post{}
 
-	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC LIMIT 25")
+	query := `SELECT p.id AS post_id, p.user_id, p.body, p.mime, p.created_at, u.id, u.account_name, u.passhash, u.authority, u.del_flg, u.created_at
+	    FROM posts AS p JOIN users AS u ON p.user_id = u.id
+		ORDER BY p.created_at DESC LIMIT 25`
+
+	rows, err := db.QueryContext(context.Background(), query)
 	if err != nil {
 		log.Print(err)
 		return
+	}
+
+	for rows.Next() {
+		var post Post
+		var user User
+
+		err := rows.Scan(
+			&post.ID, &post.UserID, &post.Body, &post.Mime, &post.CreatedAt,
+			&user.ID, &user.AccountName, &user.Passhash, &user.Authority, &user.DelFlg, &user.CreatedAt,
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		post.User = user
+		results = append(results, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
 	}
 
 	posts, err := makePosts(results, getCSRFToken(r), false)
@@ -447,6 +466,11 @@ func getAccountName(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Print(err)
 		return
+	}
+
+	// resultsのPostにUserを埋め込む
+	for i := range results {
+		results[i].User = user
 	}
 
 	posts, err := makePosts(results, getCSRFToken(r), false)
@@ -531,10 +555,29 @@ func getPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := []Post{}
-	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= ? ORDER BY `created_at` DESC LIMIT 25", t.Format(ISO8601Format))
+	query := `SELECT p.id AS post_id, p.user_id, p.body, p.mime, p.created_at, u.id, u.account_name, u.passhash, u.authority, u.del_flg, u.created_at
+		FROM posts AS p JOIN users AS u ON p.user_id = u.id
+		WHERE p.created_at <= ? 
+		ORDER BY p.created_at DESC LIMIT 25`
+
+	rows, err := db.Query(query, t.Format(ISO8601Format))
 	if err != nil {
 		log.Print(err)
 		return
+	}
+
+	for rows.Next() {
+		var post Post
+		var user User
+		err = rows.Scan(&post.ID, &post.UserID, &post.Body, &post.Mime, &post.CreatedAt,
+			&user.ID, &user.AccountName, &user.Passhash, &user.Authority, &user.DelFlg, &user.CreatedAt)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+
+		post.User = user
+		results = append(results, post)
 	}
 
 	posts, err := makePosts(results, getCSRFToken(r), false)
@@ -567,10 +610,33 @@ func getPostsID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := []Post{}
-	err = db.Select(&results, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+
+	query := `SELECT p.id AS post_id, p.user_id, p.body, p.mime, p.created_at, u.id, u.account_name, u.passhash, u.authority, u.del_flg, u.created_at
+	    FROM posts AS p JOIN users AS u ON p.user_id = u.id
+		WHERE p.id = ?`
+
+	rows, err := db.Query(query, pid)
 	if err != nil {
 		log.Print(err)
 		return
+	}
+
+	for rows.Next() {
+		var post Post
+		var user User
+		err = rows.Scan(&post.ID, &post.UserID, &post.Body, &post.Mime, &post.CreatedAt,
+			&user.ID, &user.AccountName, &user.Passhash, &user.Authority, &user.DelFlg, &user.CreatedAt)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+
+		post.User = user
+		results = append(results, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
 	}
 
 	posts, err := makePosts(results, getCSRFToken(r), true)
