@@ -194,7 +194,7 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 			query += " LIMIT 3"
 		}
 		// JOINクエリを実行
-		rows, err := db.Query(query, p.ID)
+		rows, err := db.Queryx(query, p.ID)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -560,7 +560,7 @@ func getPosts(w http.ResponseWriter, r *http.Request) {
 		WHERE p.created_at <= ? 
 		ORDER BY p.created_at DESC LIMIT 25`
 
-	rows, err := db.Query(query, t.Format(ISO8601Format))
+	rows, err := db.Queryx(query, t.Format(ISO8601Format))
 	if err != nil {
 		log.Print(err)
 		return
@@ -615,7 +615,7 @@ func getPostsID(w http.ResponseWriter, r *http.Request) {
 	    FROM posts AS p JOIN users AS u ON p.user_id = u.id
 		WHERE p.id = ?`
 
-	rows, err := db.Query(query, pid)
+	rows, err := db.Queryx(query, pid)
 	if err != nil {
 		log.Print(err)
 		return
@@ -954,19 +954,21 @@ func main() {
 	}
 
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
+		"%s:%s@tcp(%s:%s)/%s?interpolateParams=true&charset=utf8mb4&parseTime=true&loc=Local",
 		user,
 		password,
 		host,
 		port,
 		dbname,
 	)
+	println(dsn)
 
 	db, err = sqlx.Open("mysql", dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %s.", err.Error())
 	}
 	defer db.Close()
+	db.SetMaxIdleConns(50)
 
 	mux := goji.NewMux()
 
